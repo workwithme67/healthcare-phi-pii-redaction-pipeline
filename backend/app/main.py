@@ -1,80 +1,132 @@
 """
 SOAR Incident Containment Engine – Main Application Entry Point
 ===============================================================
-Day 2: Alert workflow validation, risk scoring, and threat intelligence layer.
+50% Milestone: Full backend with TI enrichment, risk scoring,
+dashboard analytics, incident timeline, and comprehensive Swagger docs.
 """
 
-import logging
+from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.config import settings
 from app.database.db import Base, engine
-from app.routes import alerts
-from app.utils.helpers import get_logger
+from app.routes import alerts, dashboard
+from app.utils.helpers import get_logger, setup_logging
 
-# Root application logger
-logger = get_logger("soar")
+# ── Logging must be configured before any module uses get_logger() ───────────
+setup_logging(
+    log_level=settings.LOG_LEVEL,
+    log_file=settings.LOG_FILE,
+    max_bytes=settings.LOG_MAX_BYTES,
+    backup_count=settings.LOG_BACKUP_COUNT,
+)
 
-# Suppress noisy SQLAlchemy engine logs in development
-logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+logger = get_logger("soar.main")
 
 
-# ── Lifespan: create tables on startup ─────────────────────────────────────
+# ── Lifespan: DB init on startup ─────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initialize database tables when the application starts."""
+    """Create all tables on startup; log shutdown."""
+    # Import models so SQLAlchemy knows about them before create_all()
+    from app.models import alert, timeline  # noqa: F401
+
     Base.metadata.create_all(bind=engine)
-    logger.info("SOAR Engine starting – database tables initialised.")
+    logger.info(
+        "SOAR Engine v%s starting | env=%s db=%s",
+        app.version, settings.APP_ENV, settings.DATABASE_URL,
+    )
+    logger.info(
+        "TI APIs | AbuseIPDB=%s | VirusTotal=%s",
+        "LIVE" if settings.abuseipdb_enabled else "mock",
+        "LIVE" if settings.virustotal_enabled else "mock",
+    )
     yield
-    logger.info("SOAR Engine shut down gracefully.")
+    logger.info("SOAR Engine shutting down.")
 
 
-# ── Application factory ─────────────────────────────────────────────────────
+# ── FastAPI application ───────────────────────────────────────────────────────
 app = FastAPI(
     title="SOAR Incident Containment Engine",
     description=(
         "## Security Orchestration, Automation, and Response Platform\n\n"
-        "Ingests security alerts, enriches them with threat intelligence (mock), "
-        "calculates risk scores (0-100), and manages the alert workflow.\n\n"
+        "Production-ready backend for ingesting, enriching, scoring, and triaging "
+        "security incidents. At the 50% milestone this system provides:\n\n"
+        "### Features\n"
+        "- **Alert Management** — full CRUD with input validation\n"
+        "- **Threat Intelligence** — AbuseIPDB + VirusTotal (live API or mock)\n"
+        "- **Risk Scoring Engine** — weighted 0-100 score mapped to Low/Medium/High/Critical\n"
+        "- **Incident Timeline** — chronological audit trail per alert\n"
+        "- **Dashboard Analytics** — summary counts, risk histogram, recent alerts\n\n"
         "### Risk Score Bands\n"
-        "| Range | Level    |\n"
+        "| Score | Level    |\n"
         "|-------|----------|\n"
-        "| 0-25  | Low      |\n"
-        "| 26-50 | Medium   |\n"
-        "| 51-75 | High     |\n"
-        "| 76-100| Critical |\n\n"
+        "| 0-25  | 🟢 Low   |\n"
+        "| 26-50 | 🟡 Medium|\n"
+        "| 51-75 | 🟠 High  |\n"
+        "|76-100 | 🔴 Critical|\n\n"
         "### Alert Workflow\n"
-        "`Open` → `Investigating` → `Resolved`"
+        "`Open` → `Investigating` → `Resolved`\n\n"
+        "### Interactive Docs\n"
+        "This page — explore and test every endpoint below."
     ),
-    version="0.2.0",
-    contact={"name": "Infotact Internship"},
+    version="0.5.0",
+    contact={"name": "Infotact Internship", "email": "intern@infotact.example"},
     license_info={"name": "MIT"},
     lifespan=lifespan,
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_tags=[
+        {
+            "name": "Health",
+            "description": "Application health-check endpoints.",
+        },
+        {
+            "name": "Alerts",
+            "description": (
+                "Full CRUD for security alerts. Includes automatic TI enrichment, "
+                "risk scoring, and timeline tracking."
+            ),
+        },
+        {
+            "name": "Dashboard",
+            "description": (
+                "Aggregate analytics — counts, risk distribution, and recent activity."
+            ),
+        },
+    ],
 )
 
-# ── CORS middleware ─────────────────────────────────────────────────────────
+# ── CORS ─────────────────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],          # Tighten in production
+    allow_origins=["*"],        # Tighten in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ── Routers ─────────────────────────────────────────────────────────────────
-app.include_router(alerts.router, prefix="/alerts", tags=["Alerts"])
+# ── Routers ───────────────────────────────────────────────────────────────────
+app.include_router(alerts.router,    prefix="/alerts",    tags=["Alerts"])
+app.include_router(dashboard.router, prefix="/dashboard", tags=["Dashboard"])
 
 
-# ── Health-check endpoint ────────────────────────────────────────────────────
-@app.get("/", tags=["Health"])
+# ── Health check ──────────────────────────────────────────────────────────────
+@app.get("/", tags=["Health"], summary="Health check")
 def health_check() -> dict:
-    """Root health-check endpoint."""
+    """Root health-check — returns running status and version."""
     return {
-        "status": "running",
-        "version": "0.2.0",
+        "status":  "running",
+        "version": "0.5.0",
         "project": "SOAR Incident Containment Engine",
-        "docs": "/docs",
+        "milestone": "50%",
+        "docs":    "/docs",
+        "ti_mode": {
+            "abuseipdb":  "live" if settings.abuseipdb_enabled else "mock",
+            "virustotal": "live" if settings.virustotal_enabled else "mock",
+        },
     }

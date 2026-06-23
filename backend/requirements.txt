@@ -6,22 +6,39 @@
 fastapi==0.111.0
 uvicorn[standard]==0.30.1
 
-# Data validation
+# Data validation & settings
 pydantic==2.7.1
 pydantic-settings==2.3.0
 email-validator==2.1.1
 
 # Database
 sqlalchemy==2.0.30
-alembic==1.13.1          # Database migrations (Day 2+)
+alembic==1.13.1
 
 # Environment management
 python-dotenv==1.0.1
 
+# HTTP client (real TI API calls)
+requests==2.32.3
+
+# Authentication & Security
+passlib[bcrypt]==1.7.4
+bcrypt==4.1.3
+python-jose[cryptography]==3.3.0
+python-multipart==0.0.9
+
+# PDF Report generation
+fpdf2==2.7.9
+
+# CSV / data utilities
+pandas==2.2.2
+
 # Testing
 pytest==8.2.2
 pytest-asyncio==0.23.7
-httpx==0.27.0            # Required by FastAPI TestClient
+pytest-cov==5.0.0
+httpx==0.27.0
+coverage==7.5.3
 
 # Linting / formatting (dev only)
 black==24.4.2

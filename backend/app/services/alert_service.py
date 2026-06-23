@@ -3,25 +3,28 @@ Alert service layer – all database operations for the Alert entity.
 
 Responsibilities
 ----------------
-- CRUD operations on Alert rows.
-- Orchestrates risk scoring on alert creation.
-- Orchestrates threat intelligence enrichment on alert creation.
-- Status transition validation.
-- Structured logging for all mutating operations.
+- Full CRUD (Create, Read, Update, Delete).
+- Orchestrates TI enrichment on creation.
+- Computes risk score on creation.
+- Writes timeline events for every mutating operation.
+- Dashboard aggregate queries.
 """
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.alert import Alert, AlertStatus, SeverityLevel
+from app.models.timeline import EventType
 from app.models.schemas import AlertCreate, AlertStatusUpdate
-from app.services import risk_scoring, threat_intelligence
+from app.services import risk_scoring, threat_intelligence, timeline_service
 from app.utils.helpers import get_logger
 
 logger = get_logger(__name__)
@@ -30,49 +33,40 @@ logger = get_logger(__name__)
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _generate_alert_id() -> str:
-    """Generate a human-readable unique alert identifier."""
     return f"ALERT-{uuid.uuid4().hex[:8].upper()}"
+
+
+def _get_or_404(db: Session, alert_id: int) -> Alert:
+    """Fetch an Alert by integer PK or raise 404."""
+    alert = db.query(Alert).filter(Alert.id == alert_id).first()
+    if not alert:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Alert with id={alert_id} not found.",
+        )
+    return alert
 
 
 # ── Create ────────────────────────────────────────────────────────────────────
 
 def create_alert(db: Session, payload: AlertCreate) -> Alert:
     """
-    Persist a new alert to the database.
+    Ingest a new alert.
 
-    Steps:
-      1. Fetch TI data for source_ip (mock).
-      2. Compute risk score from severity + alert_type + TI confidence.
-      3. Persist alert with computed risk_score.
-      4. Return the fully-populated ORM instance.
-
-    Parameters
-    ----------
-    db      : Active SQLAlchemy session.
-    payload : Validated Pydantic payload from the request body.
+    Pipeline:
+      1. Validate & persist the core alert row.
+      2. Timeline: AlertCreated.
+      3. Run TI enrichment (real API or mock).
+      4. Timeline: AlertEnriched.
+      5. Compute risk score.
+      6. Timeline: RiskCalculated.
+      7. Update alert with TI result + risk score and commit.
 
     Returns
     -------
-    Alert : The newly created ORM instance with a populated id and alert_id.
+    Alert : Fully populated ORM instance.
     """
-    # Step 1: Threat intelligence enrichment
-    try:
-        ti_data = threat_intelligence.enrich_ip(payload.source_ip)
-        ti_score = ti_data["aggregate_confidence"] / 100.0  # normalise to [0,1]
-        threat_verdict = ti_data["threat_verdict"]
-    except Exception as exc:
-        logger.warning("TI enrichment failed for %s: %s", payload.source_ip, exc)
-        ti_score = 0.0
-        threat_verdict = "Unknown"
-
-    # Step 2: Risk scoring
-    risk_score = risk_scoring.calculate_risk_score(
-        severity=payload.severity,
-        alert_type=payload.alert_type,
-        ti_score=ti_score,
-    )
-
-    # Step 3: Build ORM instance
+    # ── Step 1: Persist alert skeleton ────────────────────────────────────────
     alert = Alert(
         alert_id=_generate_alert_id(),
         alert_type=payload.alert_type,
@@ -80,22 +74,90 @@ def create_alert(db: Session, payload: AlertCreate) -> Alert:
         severity=payload.severity,
         description=payload.description,
         status=payload.status,
-        risk_score=risk_score,
+        risk_score=0.0,
+        threat_verdict="Pending",
+    )
+    db.add(alert)
+    db.commit()
+    db.refresh(alert)
+
+    # ── Step 2: Timeline — AlertCreated ───────────────────────────────────────
+    timeline_service.add_event(
+        db=db,
+        alert_db_id=alert.id,
+        alert_id=alert.alert_id,
+        event_type=EventType.AlertCreated,
+        description=(
+            f"Alert ingested | type={alert.alert_type} "
+            f"ip={alert.source_ip} severity={alert.severity}"
+        ),
+        metadata={"alert_type": alert.alert_type, "source_ip": alert.source_ip,
+                  "severity": alert.severity},
     )
 
-    db.add(alert)
+    # ── Step 3: Threat intelligence enrichment ────────────────────────────────
+    ti_data: Dict[str, Any] = {}
+    ti_score = 0.0
+    threat_verdict = "Unknown"
+
+    try:
+        ti_data = threat_intelligence.enrich_ip(alert.source_ip)
+        ti_score = ti_data.get("aggregate_confidence", 0.0) / 100.0
+        threat_verdict = ti_data.get("threat_verdict", "Unknown")
+    except Exception as exc:
+        logger.warning("TI enrichment failed for %s: %s", alert.source_ip, exc)
+
+    # ── Step 4: Timeline — AlertEnriched ─────────────────────────────────────
+    timeline_service.add_event(
+        db=db,
+        alert_db_id=alert.id,
+        alert_id=alert.alert_id,
+        event_type=EventType.AlertEnriched,
+        description=(
+            f"TI enrichment complete | verdict={threat_verdict} "
+            f"confidence={round(ti_score * 100, 1)}"
+        ),
+        metadata={
+            "threat_verdict": threat_verdict,
+            "aggregate_confidence": round(ti_score * 100, 2),
+            "abuseipdb_score": ti_data.get("abuseipdb", {}).get("abuse_confidence_score", 0),
+            "vt_malicious": ti_data.get("virustotal", {}).get("malicious_count", 0),
+        },
+    )
+
+    # ── Step 5: Risk scoring ──────────────────────────────────────────────────
+    computed_risk = risk_scoring.calculate_risk_score(
+        severity=alert.severity,
+        alert_type=alert.alert_type,
+        ti_score=ti_score,
+    )
+    risk_level = risk_scoring.get_risk_level(computed_risk)
+
+    # ── Step 6: Timeline — RiskCalculated ────────────────────────────────────
+    timeline_service.add_event(
+        db=db,
+        alert_db_id=alert.id,
+        alert_id=alert.alert_id,
+        event_type=EventType.RiskCalculated,
+        description=(
+            f"Risk score computed | score={computed_risk} level={risk_level}"
+        ),
+        metadata={"risk_score": computed_risk, "risk_level": risk_level},
+    )
+
+    # ── Step 7: Update alert with enrichment & score ──────────────────────────
+    alert.risk_score = computed_risk
+    alert.threat_verdict = threat_verdict
+    alert.enrichment_data = json.dumps(ti_data, default=str) if ti_data else None
+
     db.commit()
     db.refresh(alert)
 
     logger.info(
         "Alert created | alert_id=%s type=%s ip=%s severity=%s "
-        "risk_score=%.2f ti_verdict=%s",
-        alert.alert_id,
-        alert.alert_type,
-        alert.source_ip,
-        alert.severity,
-        alert.risk_score,
-        threat_verdict,
+        "risk=%.1f verdict=%s",
+        alert.alert_id, alert.alert_type, alert.source_ip,
+        alert.severity, alert.risk_score, alert.threat_verdict,
     )
     return alert
 
@@ -108,60 +170,26 @@ def get_alerts(
     limit: int = 50,
     severity: Optional[SeverityLevel] = None,
     status: Optional[AlertStatus] = None,
+    alert_type: Optional[str] = None,
 ) -> List[Alert]:
-    """
-    Retrieve a paginated, optionally filtered list of alerts.
-
-    Parameters
-    ----------
-    db       : Active SQLAlchemy session.
-    skip     : Number of records to skip (offset).
-    limit    : Maximum records to return (capped at 100 per call).
-    severity : Optional filter by severity level.
-    status   : Optional filter by workflow status.
-    """
+    """Return a paginated, optionally filtered list of alerts."""
     query = db.query(Alert)
 
     if severity:
         query = query.filter(Alert.severity == severity)
     if status:
         query = query.filter(Alert.status == status)
+    if alert_type:
+        query = query.filter(Alert.alert_type.ilike(f"%{alert_type}%"))
 
     return query.order_by(Alert.created_at.desc()).offset(skip).limit(limit).all()
 
 
-# ── Read (single by int id) ───────────────────────────────────────────────────
+# ── Read (single) ─────────────────────────────────────────────────────────────
 
 def get_alert_by_id(db: Session, alert_id: int) -> Alert:
-    """
-    Fetch a single alert by its integer primary key.
-
-    Raises 404 if not found.
-    """
-    alert = db.query(Alert).filter(Alert.id == alert_id).first()
-    if not alert:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Alert with id={alert_id} not found.",
-        )
-    return alert
-
-
-# ── Read (single by alert_id string) ─────────────────────────────────────────
-
-def get_alert_by_alert_id(db: Session, alert_id: str) -> Alert:
-    """
-    Fetch a single alert by its human-readable alert_id (e.g. "ALERT-A3F80001").
-
-    Raises 404 if not found.
-    """
-    alert = db.query(Alert).filter(Alert.alert_id == alert_id).first()
-    if not alert:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Alert '{alert_id}' not found.",
-        )
-    return alert
+    """Fetch by integer PK; raises 404 if not found."""
+    return _get_or_404(db, alert_id)
 
 
 # ── Update status ─────────────────────────────────────────────────────────────
@@ -172,46 +200,111 @@ def update_alert_status(
     payload: AlertStatusUpdate,
 ) -> Alert:
     """
-    Update the workflow status of an alert.
+    Transition the alert's workflow status and record a timeline event.
 
-    Allowed transitions:
-      Open → Investigating → Resolved
-      Any status → Open  (re-open)
-
-    Parameters
-    ----------
-    db       : Active SQLAlchemy session.
-    alert_id : Integer primary key of the alert to update.
-    payload  : Validated status update payload.
-
-    Returns
-    -------
-    Alert : The updated ORM instance.
-
-    Raises
-    ------
-    HTTPException 404 : Alert not found.
+    Raises 404 if the alert does not exist.
     """
-    alert = get_alert_by_id(db=db, alert_id=alert_id)
+    alert = _get_or_404(db, alert_id)
     old_status = alert.status
+    new_status = payload.status
 
-    alert.status = payload.status
+    alert.status = new_status
     alert.updated_at = datetime.now(timezone.utc)
 
     db.commit()
     db.refresh(alert)
 
+    timeline_service.add_event(
+        db=db,
+        alert_db_id=alert.id,
+        alert_id=alert.alert_id,
+        event_type=EventType.StatusUpdated,
+        description=f"Status changed: {old_status} -> {new_status}",
+        metadata={"old_status": old_status, "new_status": new_status},
+    )
+
     logger.info(
         "Alert status updated | alert_id=%s %s -> %s",
-        alert.alert_id,
-        old_status,
-        alert.status,
+        alert.alert_id, old_status, new_status,
     )
     return alert
 
 
-# ── Count (helper) ────────────────────────────────────────────────────────────
+# ── Delete ────────────────────────────────────────────────────────────────────
+
+def delete_alert(db: Session, alert_id: int) -> Dict[str, str]:
+    """
+    Permanently delete an alert and all its timeline events.
+
+    The timeline CASCADE delete on the ORM model removes child events
+    automatically.
+
+    Returns
+    -------
+    dict : Confirmation with the deleted alert_id.
+
+    Raises
+    ------
+    HTTPException 404 : Alert not found.
+    """
+    alert = _get_or_404(db, alert_id)
+    alert_ref = alert.alert_id    # capture before deletion
+
+    # Record final event before cascade deletes it along with the alert
+    timeline_service.add_event(
+        db=db,
+        alert_db_id=alert.id,
+        alert_id=alert.alert_id,
+        event_type=EventType.AlertDeleted,
+        description=f"Alert permanently deleted from the system.",
+        metadata={"alert_type": alert.alert_type, "source_ip": alert.source_ip},
+    )
+
+    db.delete(alert)
+    db.commit()
+
+    logger.info("Alert deleted | alert_id=%s", alert_ref)
+    return {"message": f"Alert {alert_ref} deleted successfully.", "alert_id": alert_ref}
+
+
+# ── Count helpers ─────────────────────────────────────────────────────────────
 
 def count_alerts(db: Session) -> int:
-    """Return the total number of alerts in the database."""
     return db.query(Alert).count()
+
+
+def count_by_status(db: Session, alert_status: AlertStatus) -> int:
+    return db.query(Alert).filter(Alert.status == alert_status).count()
+
+
+def count_by_severity(db: Session, severity: SeverityLevel) -> int:
+    return db.query(Alert).filter(Alert.severity == severity).count()
+
+
+def count_by_verdict(db: Session, verdict: str) -> int:
+    return db.query(Alert).filter(Alert.threat_verdict == verdict).count()
+
+
+def avg_risk_score(db: Session) -> float:
+    result = db.query(func.avg(Alert.risk_score)).scalar()
+    return round(float(result or 0.0), 2)
+
+
+def risk_distribution(db: Session) -> Dict[str, int]:
+    """Return count of alerts in each risk band."""
+    all_alerts = db.query(Alert.risk_score).all()
+    buckets = {"Low": 0, "Medium": 0, "High": 0, "Critical": 0}
+    for (score,) in all_alerts:
+        s = score or 0.0
+        level = risk_scoring.get_risk_level(s)
+        buckets[level] += 1
+    return buckets
+
+
+def get_recent_alerts(db: Session, limit: int = 10) -> List[Alert]:
+    return (
+        db.query(Alert)
+        .order_by(Alert.created_at.desc())
+        .limit(limit)
+        .all()
+    )

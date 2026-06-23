@@ -1,36 +1,34 @@
 """
 Database configuration and session management.
-Uses SQLite for Day-1 development; swap DATABASE_URL for
-PostgreSQL/MySQL in production via the .env file.
+
+Reads DATABASE_URL from app.config (which reads from .env).
+SQLite for development; swap DATABASE_URL for PostgreSQL in production.
 """
 
-import os
+from __future__ import annotations
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
-from dotenv import load_dotenv
 
-load_dotenv()
+from app.config import settings
 
-# ── Database URL ─────────────────────────────────────────────────────────────
-DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./soar.db")
-
-# ── SQLAlchemy engine ────────────────────────────────────────────────────────
-# check_same_thread=False is required for SQLite + FastAPI's async handlers
-engine = create_engine(
-    DATABASE_URL,
-    connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {},
+# ── Engine ────────────────────────────────────────────────────────────────────
+_connect_args = (
+    {"check_same_thread": False} if "sqlite" in settings.DATABASE_URL else {}
 )
 
-# ── Session factory ──────────────────────────────────────────────────────────
+engine = create_engine(settings.DATABASE_URL, connect_args=_connect_args)
+
+# ── Session factory ───────────────────────────────────────────────────────────
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-# ── Declarative base for ORM models ─────────────────────────────────────────
+# ── Declarative base ──────────────────────────────────────────────────────────
 Base = declarative_base()
 
 
-# ── Dependency: yields a DB session per request ──────────────────────────────
+# ── Request-scoped DB dependency ──────────────────────────────────────────────
 def get_db():
-    """FastAPI dependency that provides a SQLAlchemy session."""
+    """FastAPI dependency that yields a per-request SQLAlchemy session."""
     db = SessionLocal()
     try:
         yield db
