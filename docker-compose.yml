@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  # FastAPI backend service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: redaction-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - backend-db:/app/data
+    environment:
+      - APP_ENV=development
+      - DEBUG=true
+      - DATABASE_URL=sqlite:///./data/redaction.db
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+    networks:
+      - redaction-network
+
+  # React frontend service
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: redaction-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - redaction-network
+
+  # Redis service (caching/pub-sub config ready for Day 2)
+  redis:
+    image: redis:7-alpine
+    container_name: redaction-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - redaction-network
+
+volumes:
+  backend-db:
+  redis-data:
+
+networks:
+  redaction-network:
+    driver: bridge
