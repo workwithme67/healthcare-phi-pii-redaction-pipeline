@@ -48,6 +48,9 @@ class Settings(BaseSettings):
     # ── Database ──────────────────────────────────────────────────────────────
     DATABASE_URL: str = "sqlite:///./data/redaction.db"
 
+    # ── Uploads ───────────────────────────────────────────────────────────────
+    UPLOAD_DIR: str = "uploads"
+
     # ── Redis ─────────────────────────────────────────────────────────────────
     REDIS_URL: str = "redis://localhost:6379/0"
     REDIS_MAX_CONNECTIONS: int = 10

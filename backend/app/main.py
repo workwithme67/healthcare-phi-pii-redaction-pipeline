@@ -14,6 +14,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import api_router
+from app.api.upload import router as upload_router
 from app.config.logging_config import setup_logging
 from app.config.settings import settings
 from app.database.database import init_db
@@ -60,6 +61,7 @@ def create_application() -> FastAPI:
 
     # ── API Routes ────────────────────────────────────────────────────────────
     application.include_router(api_router)
+    application.include_router(upload_router)
 
     # ── Root Redirect ─────────────────────────────────────────────────────────
     @application.get("/", include_in_schema=False)
@@ -81,6 +83,9 @@ def create_application() -> FastAPI:
             settings.APP_ENV,
         )
         init_db()
+        # Ensure upload directory exists
+        from pathlib import Path
+        Path(settings.UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
         logger.info("Application startup complete.")
 
     @application.on_event("shutdown")

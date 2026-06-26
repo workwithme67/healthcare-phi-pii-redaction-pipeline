@@ -44,6 +44,7 @@ def init_db() -> None:
     """
     # Import models so SQLAlchemy registers them before create_all
     from app.models import audit_log, redaction_job  # noqa: F401
+    from app.database import models as db_models  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
     logger.info("Database tables created / verified.", extra={"url": settings.DATABASE_URL})

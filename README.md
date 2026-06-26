@@ -132,27 +132,116 @@ To launch the complete environment (FastAPI Backend, React Dashboard, and Redis 
 
 ---
 
-## 🛡️ Verification & Testing
+## 📁 Day 2 Ingestion System — Folder Explanation
 
-Verify that all endpoints pass our high-standard test cases:
-
-1. Navigate to the backend folder:
-   ```bash
-   cd backend
-   ```
-2. Execute the test suite using pytest:
-   ```bash
-   pytest -v
-   ```
+The following components were added to implement the secure note ingestion pipeline:
+* **`backend/app/database/models.py`**: SQLite ORM model for the `uploads` table, tracking metadata, types (`TEXT`, `TXT`, `PDF`), payload sizes in bytes, and status.
+* **`backend/app/services/upload_service.py`**: Business logic layer managing input validation, file storage on disk in `uploads/`, filename sanitization, and strict directory traversal prevention.
+* **`backend/app/api/upload.py`**: FastAPI router exposing the endpoints for uploading text, files, listing, detail retrieval, and deletion.
+* **`frontend/src/services/uploadService.js`**: Axios API service layer driving raw text and multipart/form-data file uploads (complete with upload progress tracking).
+* **`frontend/src/components/UploadCard.jsx`**: Dashboard KPI stats cards computing total uploads, uploads today, pending queue, and average upload size.
+* **`frontend/src/components/UploadForm.jsx`**: Premium drag-and-drop ingestion form with file validations, text editors, character counters, progress bars, and status banners.
+* **`frontend/src/components/UploadHistory.jsx`**: Administrative list table containing upload metadata, status pills, secure two-step delete confirmations, and clinical text preview modals.
+* **`frontend/src/pages/ClinicalUpload.jsx`**: Ingestion management hub orchestrating forms, history, and real-time dashboard calculations.
 
 ---
 
-## 🔮 Future Roadmap (Day 2 & Day 3)
+## 🔌 API Documentation
 
-* **Day 2 (PHI Detection & Redaction)**:
-  * Wire **Microsoft Presidio** Analyzer & Anonymizer to redact 18 Safe Harbor identifiers.
-  * Integrate custom **SpaCy** medical entities model for precision clinical parsing.
-  * Implement dynamic manual review screens allowing doctors to toggle redactions on/off.
-* **Day 3 (LLM Integrations & AI Audit)**:
-  * Connect **OpenAI** GPT-4 and local **Ollama** LLMs for final structural safety checks.
-  * Implement streaming redacted notes directly into agentic workflows.
+All ingestion endpoints live under the `/api` prefix:
+
+### 1. Upload Raw Clinical Text
+* **Endpoint**: `POST /api/upload-text`
+* **Request Body**:
+  ```json
+  {
+    "note": "Patient Alice Brown, DOB 05/14/1992, visited reporting acute abdomen..."
+  }
+  ```
+* **Response (201 Created)**:
+  ```json
+  {
+    "success": true,
+    "message": "Clinical note uploaded successfully",
+    "note_id": "8a8fca02-e221-49fa-b394-399a9a3b68ee"
+  }
+  ```
+* **Validation**: Rejects empty notes, and notes exceeding 100,000 characters.
+
+### 2. Upload Document File (TXT or PDF)
+* **Endpoint**: `POST /api/upload-file`
+* **Request Format**: `multipart/form-data` with `file` field
+* **Response (201 Created)**:
+  ```json
+  {
+    "id": "e2fcfbc2-3c2b-4221-a20b-bd989f5e27fb",
+    "filename": "patient_chart.pdf",
+    "uploaded_at": "2026-06-26T12:00:00.000Z",
+    "file_type": "PDF",
+    "size_bytes": 14205,
+    "status": "Uploaded"
+  }
+  ```
+* **Validation**: Max file size is 10MB. Rejects file types other than `.txt` and `.pdf`.
+
+### 3. List All Uploads
+* **Endpoint**: `GET /api/uploads`
+* **Response (200 OK)**:
+  ```json
+  [
+    {
+      "id": "e2fcfbc2-3c2b-4221-a20b-bd989f5e27fb",
+      "filename": "patient_chart.pdf",
+      "uploaded_at": "2026-06-26T12:00:00.000Z",
+      "file_type": "PDF",
+      "size_bytes": 14205,
+      "status": "Uploaded"
+    }
+  ]
+  ```
+
+### 4. Get Upload Details
+* **Endpoint**: `GET /api/uploads/{id}`
+* **Response (200 OK)**:
+  ```json
+  {
+    "id": "8a8fca02-e221-49fa-b394-399a9a3b68ee",
+    "filename": "Direct Note Upload",
+    "note_text": "Patient Alice Brown, DOB 05/14/1992...",
+    "file_type": "TEXT",
+    "size_bytes": 88,
+    "created_at": "2026-06-26T12:05:00.000Z",
+    "status": "Uploaded"
+  }
+  ```
+
+### 5. Delete Upload
+* **Endpoint**: `DELETE /api/uploads/{id}`
+* **Response (200 OK)**:
+  ```json
+  {
+    "success": true,
+    "message": "Clinical note with ID '{id}' deleted successfully."
+  }
+  ```
+* **Behavior**: Deletes the database metadata record and removes the file from local server disk storage.
+
+---
+
+## 🛡️ Security Safeguards
+* **CORS Protection**: Access control headers enabled to allow seamless, secure communication with authorized client domains.
+* **Directory Traversal Protection**: Filenames are strictly resolved relative to the target upload directory. Any attempt to reference external paths (e.g. `../../` paths) is immediately detected and rejected with a `400 Bad Request` before file operations run.
+* **Filename Sanitization**: Uploaded filenames are stripped of non-alphanumeric/dot/dash/underscore characters to prevent shell injections and local file system issues.
+* **UUID Isolation**: Database records are indexed by cryptographically random UUIDv4 identifiers, preventing ID harvesting or direct object reference leakage.
+
+---
+
+## 🔮 Future Roadmap
+
+* **Day 3 (Regex & Presidio PHI Detection)**:
+  * Implement custom regular expression filters for rapid PHI scrubbing.
+  * Integration of **Microsoft Presidio** Analyzer & Anonymizer for deep NLP-driven PHI/PII classification (18 Safe Harbor identifiers).
+  * Manual review screen allowing healthcare operators to audit, confirm, and export redacted texts.
+* **Day 4 (LLM Integrations & Safelands)**:
+  * Streaming redacted clinical transcriptions into OpenAI, local Ollama, and Anthropic APIs.
+  * Audited LLM output evaluation.

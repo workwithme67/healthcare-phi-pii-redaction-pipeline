@@ -8,6 +8,12 @@ from app.schemas.redaction import (
     RedactionJobListResponse,
     RedactionJobResponse,
 )
+from app.schemas.upload import (
+    UploadTextRequest,
+    UploadTextResponse,
+    UploadFileResponse,
+    UploadDetailResponse,
+)
 
 __all__ = [
     "AppBaseModel",
@@ -19,4 +25,8 @@ __all__ = [
     "RedactionJobResponse",
     "RedactionJobDetail",
     "RedactionJobListResponse",
+    "UploadTextRequest",
+    "UploadTextResponse",
+    "UploadFileResponse",
+    "UploadDetailResponse",
 ]
