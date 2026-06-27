@@ -3,11 +3,12 @@ HealthTech PHI/PII Redaction Pipeline
 API Router
 
 Aggregates all route modules under the /api/v1 prefix.
+Also mounts the Day 3 detection engine under /api directly.
 """
 
 from fastapi import APIRouter
 
-from app.api.routes import audit, health, redaction
+from app.api.routes import audit, detect, health, redaction
 
 # Root API router — all routes live under /api/v1
 api_router = APIRouter(prefix="/api/v1")
@@ -20,3 +21,8 @@ api_router.include_router(redaction.router)
 
 # Audit logs → /api/v1/audit
 api_router.include_router(audit.router)
+
+# ── Day 3: Detection Engine — mounted at /api (no v1 prefix per spec) ────────
+detect_router = APIRouter(prefix="/api")
+detect_router.include_router(detect.router)
+

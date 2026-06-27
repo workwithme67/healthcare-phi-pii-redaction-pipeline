@@ -13,7 +13,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.router import api_router
+from app.api.router import api_router, detect_router
 from app.api.upload import router as upload_router
 from app.config.logging_config import setup_logging
 from app.config.settings import settings
@@ -61,6 +61,7 @@ def create_application() -> FastAPI:
 
     # ── API Routes ────────────────────────────────────────────────────────────
     application.include_router(api_router)
+    application.include_router(detect_router)      # Day 3: /api/detect, /api/redact, /api/statistics
     application.include_router(upload_router)
 
     # ── Root Redirect ─────────────────────────────────────────────────────────

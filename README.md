@@ -1,8 +1,10 @@
-# HealthTech PHI/PII Redaction Pipeline for LLMs (Day 1 Foundation)
+# HealthTech PHI/PII Redaction Pipeline for LLMs
 
 A production-ready, HIPAA-compliant pipeline to identify, log, and redact Protected Health Information (PHI) and Personally Identifiable Information (PII) from clinical notes before passing them to Large Language Model (LLM) APIs.
 
-Day 1 delivers the **complete project foundation** with robust FastAPI backend services, an elegant React dashboard styled with a professional healthcare theme, structured database migrations (SQLite + ready Redis configurations), full Dockerization, and robust compliance audit logs.
+**Day 1** — Project foundation (FastAPI backend, React dashboard, SQLite, Docker).  
+**Day 2** — File upload service, audit trails, statistics dashboard.  
+**Day 3** — Regex-Based PHI/PII Detection Engine (13 entity types, highlight UI, redaction, detection history).
 
 ---
 
@@ -236,12 +238,112 @@ All ingestion endpoints live under the `/api` prefix:
 
 ---
 
+---
+
+## 🔬 Day 3 — Regex-Based PHI/PII Detection Engine
+
+### Supported Entity Types
+
+| Type | Pattern Description | Confidence |
+|------|---------------------|-----------|
+| `EMAIL` | Standard email addresses | 1.0 |
+| `PHONE` | Indian 10-digit (with optional +91 prefix) | 0.95 |
+| `DATE` | DD/MM/YYYY, MM/DD/YYYY, YYYY-MM-DD | 1.0 |
+| `AADHAAR` | 12-digit (groups of 4, optional separator) | 0.95 |
+| `PAN` | 5 letters + 4 digits + 1 letter | 1.0 |
+| `PASSPORT` | Indian format: 1 letter + 7 digits | 0.90 |
+| `CREDIT_CARD` | Major card prefixes, 13–19 digits | 0.95 |
+| `IP_ADDRESS` | IPv4 (0.0.0.0 – 255.255.255.255) | 1.0 |
+| `PIN_CODE` | Indian 6-digit PIN code | 0.85 |
+| `URL` | HTTP/HTTPS URLs | 1.0 |
+| `MRN` | Medical Record Number with keyword prefix | 0.95 |
+| `PATIENT_ID` | Patient ID with keyword prefix | 0.95 |
+| `HEALTH_INSURANCE` | Insurance/Policy number with keyword | 0.90 |
+
+### API Examples
+
+**POST /api/detect**
+```bash
+curl -X POST http://localhost:8000/api/detect \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Call 9876543210 or email john@example.com"}'
+```
+```json
+{
+  "success": true,
+  "entities": [
+    {"type": "PHONE", "value": "9876543210", "start": 5, "end": 15, "confidence": 0.95},
+    {"type": "EMAIL", "value": "john@example.com", "start": 25, "end": 41, "confidence": 1.0}
+  ],
+  "entity_count": 2,
+  "processing_time_ms": 0.8
+}
+```
+
+**POST /api/redact**
+```bash
+curl -X POST http://localhost:8000/api/redact \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Phone: 9876543210\nEmail: john@example.com"}'
+```
+```json
+{
+  "success": true,
+  "redacted_text": "Phone: [PHONE_001]\nEmail: [EMAIL_001]",
+  "entities": [...],
+  "entity_count": 2
+}
+```
+
+**GET /api/statistics**
+```bash
+curl http://localhost:8000/api/statistics
+```
+```json
+{
+  "total_notes_processed": 42,
+  "total_entities_found": 187,
+  "entity_counts_by_type": [
+    {"type": "PHONE", "count": 35},
+    {"type": "EMAIL", "count": 28}
+  ],
+  "average_detection_time_ms": 1.23,
+  "total_detect_calls": 30,
+  "total_redact_calls": 12
+}
+```
+
+### Detection Workflow
+
+```
+Input Text
+    │
+    ▼
+RegexDetector.detect()
+  ├─ Run 13 regex patterns in sequence
+  ├─ Collect all span matches
+  ├─ Sort by start position
+  └─ Deduplicate overlapping spans (keep highest confidence)
+    │
+    ▼
+EntityResult list  ──►  POST /api/detect  ──►  DetectionLog saved to SQLite
+    │
+    ▼
+[optional] RegexDetector.redact()
+  └─ Replace spans right-to-left with [TYPE_NNN] placeholders
+    │
+    ▼
+POST /api/redact  ──►  Redacted text returned
+```
+
+---
+
 ## 🔮 Future Roadmap
 
-* **Day 3 (Regex & Presidio PHI Detection)**:
-  * Implement custom regular expression filters for rapid PHI scrubbing.
-  * Integration of **Microsoft Presidio** Analyzer & Anonymizer for deep NLP-driven PHI/PII classification (18 Safe Harbor identifiers).
-  * Manual review screen allowing healthcare operators to audit, confirm, and export redacted texts.
-* **Day 4 (LLM Integrations & Safelands)**:
-  * Streaming redacted clinical transcriptions into OpenAI, local Ollama, and Anthropic APIs.
+* **Day 4 (Microsoft Presidio Integration)**:
+  * NLP-driven entity recognition via Presidio Analyzer.
+  * spaCy model integration for name/location entities.
+  * Side-by-side comparison: Regex vs Presidio results.
+* **Day 5 (LLM Integration)**:
+  * Streaming redacted clinical transcriptions into OpenAI, Ollama, and Anthropic APIs.
   * Audited LLM output evaluation.

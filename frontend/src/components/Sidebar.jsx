@@ -7,13 +7,15 @@ import {
   History, 
   BarChart2, 
   Settings as SettingsIcon,
-  Server
+  Server,
+  ScanSearch,
 } from 'lucide-react';
 
 const Sidebar = ({ isOpen, systemStatus }) => {
   const menuItems = [
     { name: 'Dashboard', path: '/', icon: Home },
     { name: 'Upload Note', path: '/upload', icon: Upload },
+    { name: 'Detection', path: '/detection', icon: ScanSearch },
     { name: 'Audit Logs', path: '/audit-logs', icon: History },
     { name: 'Statistics', path: '/statistics', icon: BarChart2 },
     { name: 'Settings', path: '/settings', icon: SettingsIcon },
