@@ -4,7 +4,110 @@ A production-ready, HIPAA-compliant pipeline to identify, log, and redact Protec
 
 **Day 1** — Project foundation (FastAPI backend, React dashboard, SQLite, Docker).  
 **Day 2** — File upload service, audit trails, statistics dashboard.  
-**Day 3** — Regex-Based PHI/PII Detection Engine (13 entity types, highlight UI, redaction, detection history).
+**Day 3** — Regex-Based PHI/PII Detection Engine (13 entity types, highlight UI, redaction, detection history).  
+**Day 4** — AI Detection Engine: Microsoft Presidio + spaCy NER, custom recognizers, entity merging, comparison API.
+
+---
+
+## 🧠 Day 4 — AI-Powered PHI/PII Detection Engine
+
+### What was added
+
+| Component | Description |
+|-----------|-------------|
+| **Microsoft Presidio** | Industry-standard NLP-based PII detection framework by Microsoft |
+| **spaCy NER** | Named Entity Recognition using `en_core_web_lg` or `en_core_web_sm` |
+| **Custom Recognizers** | 6 healthcare/India-specific PatternRecognizer subclasses |
+| **Entity Merger** | Overlap-based deduplication combining all three engines |
+| **POST /api/detect-ai** | New AI detection endpoint (Presidio + spaCy pipeline) |
+| **POST /api/compare** | Engine comparison endpoint (Regex vs Presidio vs spaCy) |
+| **AI Detection Page** | New frontend page with dashboard cards, entity table, comparison chart |
+
+### Microsoft Presidio
+
+Presidio (`presidio-analyzer`) provides an `AnalyzerEngine` backed by a spaCy NLP pipeline. It includes out-of-the-box recognizers for:
+- `PERSON`, `ORGANIZATION`, `LOCATION`, `DATE_TIME`
+- `EMAIL_ADDRESS`, `PHONE_NUMBER`, `CREDIT_CARD`, `IP_ADDRESS`, `URL`
+- `MEDICAL_LICENSE`, `MEDICAL_RECORD_NUMBER`
+
+All built-in recognizers are supplemented by our custom recognizers.
+
+### spaCy Named Entity Recognition
+
+spaCy runs independent NER via `en_core_web_lg` (preferred) or `en_core_web_sm`. Label mappings:
+
+| spaCy Label | Project Entity Type |
+|-------------|---------------------|
+| `PERSON` | `PERSON` |
+| `ORG` | `ORGANIZATION` |
+| `GPE` | `LOCATION` |
+| `LOC` | `LOCATION` |
+| `FAC` | `HOSPITAL` |
+| `DATE` / `TIME` | `DATE_TIME` |
+
+Doctor promotion: when a PERSON entity is preceded by `Dr.`, `Doctor`, `Prof.`, it is reclassified as `DOCTOR`.
+
+### Custom Recognizers
+
+| Recognizer | Entity Type | Example |
+|-----------|-------------|---------|
+| `AadhaarRecognizer` | `AADHAAR_NUMBER` | `2345 6789 0123` |
+| `PANRecognizer` | `IN_PAN` | `ABCDE1234F` |
+| `PassportRecognizer` | `IN_PASSPORT` | `B1234567` |
+| `PatientIDRecognizer` | `PATIENT` | `PID-A987654` |
+| `HospitalIDRecognizer` | `HOSPITAL` | `HSP-001234` |
+| `InsuranceNumberRecognizer` | `MEDICAL_LICENSE` | `HIN-POL-234567` |
+
+### Medical Context Awareness
+
+A curated allowlist of 60+ disease names prevents false-positive PERSON detections:
+
+```
+✅ KEEP:  "Parkinson's disease", "Alzheimer's", "Hodgkin lymphoma"
+✅ KEEP:  "Crohn's disease", "Wilson disease", "Huntington's disease"
+❌ REDACT: "John Smith", "Dr. Michael Adams", "Apollo Hospital"
+```
+
+### Entity Merging & Deduplication
+
+The `EntityMerger` service:
+1. Pools entities from all three engines (Presidio + spaCy + Regex)
+2. Sorts by character position
+3. For overlapping spans, keeps the highest-confidence entity
+4. Tie-breaks by source priority: **Presidio > spaCy > Regex**
+5. Tracks all contributing sources per entity
+
+### Comparison API
+
+`POST /api/compare` runs all three engines independently:
+
+```json
+{
+  "regex": 12,
+  "presidio": 17,
+  "spacy": 15,
+  "merged": 20,
+  "duplicates_removed": 24,
+  "processing_time": "48ms",
+  "engine_stats": [...]
+}
+```
+
+### Setup — Install AI Libraries
+
+```bash
+# Install Python packages
+pip install presidio-analyzer==2.2.356 presidio-anonymizer==2.2.356 spacy==3.8.3
+
+# Download spaCy model (recommended: lg for better accuracy)
+python -m spacy download en_core_web_lg
+
+# Or use the smaller model for faster startup
+python -m spacy download en_core_web_sm
+```
+
+The backend falls back to `en_core_web_sm` automatically if `en_core_web_lg` is not installed.
+
 
 ---
 

@@ -27,10 +27,10 @@ httpx==0.28.1                     # Async HTTP client for Presidio / external AP
 python-jose[cryptography]==3.3.0  # JWT tokens
 passlib[bcrypt]==1.7.4            # Password hashing
 
-# ── Future: PHI Detection (Day 2+) ───────────────────────────────────────────
-# presidio-analyzer==2.2.355
-# presidio-anonymizer==2.2.355
-# spacy==3.7.6
+# ── PHI Detection — Day 4: Presidio + spaCy ──────────────────────────────────
+presidio-analyzer==2.2.356
+presidio-anonymizer==2.2.356
+spacy==3.8.3
 
 # ── Future: LLM Integrations (Day 3+) ────────────────────────────────────────
 # openai==1.58.1

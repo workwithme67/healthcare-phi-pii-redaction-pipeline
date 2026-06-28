@@ -39,6 +39,16 @@ ENV/
 env/
 data/
 
+# ── Database & Uploads ──
+**/*.db
+**/*.sqlite
+**/*.sqlite3
+backend/data/
+backend/uploads/
+backend/verify_day4.py
+backend/verify_presidio_lg.py
+
+
 # ── Node / Frontend ──
 node_modules/
 dist/
