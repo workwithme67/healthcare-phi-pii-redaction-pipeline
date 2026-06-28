@@ -87,6 +87,26 @@ def create_application() -> FastAPI:
         # Ensure upload directory exists
         from pathlib import Path
         Path(settings.UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
+
+        # ── Day 4: Warm up AI detection models ────────────────────────────────
+        # Load Presidio + spaCy in background to avoid cold-start on first request.
+        # Failures here are non-fatal — the API will raise 503 if models are missing.
+        try:
+            from app.services.presidio_service import presidio_service
+            from app.services.spacy_service import spacy_service
+
+            logger.info("Warming up Presidio and spaCy models…")
+            presidio_service.warm_up()
+            spacy_service.warm_up()
+            logger.info("AI detection models ready.")
+        except Exception as exc:
+            logger.warning(
+                "AI model warm-up failed (non-fatal): %s. "
+                "Install presidio-analyzer, presidio-anonymizer, spacy, "
+                "and run: python -m spacy download en_core_web_lg",
+                exc,
+            )
+
         logger.info("Application startup complete.")
 
     @application.on_event("shutdown")
