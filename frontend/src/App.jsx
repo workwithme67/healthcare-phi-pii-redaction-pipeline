@@ -7,6 +7,7 @@ import AuditLogs from './pages/AuditLogs';
 import Statistics from './pages/Statistics';
 import Settings from './pages/Settings';
 import Detection from './pages/Detection';
+import AIDetection from './pages/AIDetection';
 
 function App() {
   return (
@@ -16,6 +17,7 @@ function App() {
           <Route index element={<Home />} />
           <Route path="upload" element={<ClinicalUpload />} />
           <Route path="detection" element={<Detection />} />
+          <Route path="ai-detection" element={<AIDetection />} />
           <Route path="audit-logs" element={<AuditLogs />} />
           <Route path="statistics" element={<Statistics />} />
           <Route path="settings" element={<Settings />} />
@@ -26,4 +28,3 @@ function App() {
 }
 
 export default App;
-

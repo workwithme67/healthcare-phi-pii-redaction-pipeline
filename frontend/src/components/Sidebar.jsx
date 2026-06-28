@@ -9,17 +9,20 @@ import {
   Settings as SettingsIcon,
   Server,
   ScanSearch,
+  Brain,
 } from 'lucide-react';
 
 const Sidebar = ({ isOpen, systemStatus }) => {
   const menuItems = [
-    { name: 'Dashboard', path: '/', icon: Home },
-    { name: 'Upload Note', path: '/upload', icon: Upload },
-    { name: 'Detection', path: '/detection', icon: ScanSearch },
-    { name: 'Audit Logs', path: '/audit-logs', icon: History },
-    { name: 'Statistics', path: '/statistics', icon: BarChart2 },
-    { name: 'Settings', path: '/settings', icon: SettingsIcon },
+    { name: 'Dashboard',    path: '/',             icon: Home },
+    { name: 'Upload Note',  path: '/upload',        icon: Upload },
+    { name: 'Detection',    path: '/detection',     icon: ScanSearch },
+    { name: 'AI Detection', path: '/ai-detection',  icon: Brain,    badge: 'Day 4' },
+    { name: 'Audit Logs',   path: '/audit-logs',    icon: History },
+    { name: 'Statistics',   path: '/statistics',    icon: BarChart2 },
+    { name: 'Settings',     path: '/settings',      icon: SettingsIcon },
   ];
+
 
   return (
     <aside className={`fixed inset-y-0 left-0 z-30 w-64 bg-slate-900 text-white transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}>
@@ -43,16 +46,24 @@ const Sidebar = ({ isOpen, systemStatus }) => {
             <NavLink
               key={item.path}
               to={item.path}
+              end={item.path === '/'}
               className={({ isActive }) =>
                 `flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${
                   isActive
-                    ? 'bg-teal-600 text-white shadow-lg shadow-teal-600/20'
+                    ? item.path === '/ai-detection'
+                      ? 'bg-violet-600 text-white shadow-lg shadow-violet-600/20'
+                      : 'bg-teal-600 text-white shadow-lg shadow-teal-600/20'
                     : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
                 }`
               }
             >
               <Icon className="w-5 h-5 flex-shrink-0" />
-              <span>{item.name}</span>
+              <span className="flex-1">{item.name}</span>
+              {item.badge && (
+                <span className="px-1.5 py-0.5 text-[10px] font-bold bg-violet-500/20 text-violet-400 border border-violet-500/30 rounded-full leading-none">
+                  {item.badge}
+                </span>
+              )}
             </NavLink>
           );
         })}
