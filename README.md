@@ -1,91 +1,382 @@
-# SOAR Incident Containment Engine
+# 🛡️ SOAR Incident Containment Engine
 
-## Overview
+> **Security Orchestration, Automation, and Response (SOAR) Platform**  
+> Cybersecurity Internship Project — Infotact Solution
 
-The SOAR (Security Orchestration, Automation, and Response) Incident Containment Engine is a cybersecurity automation platform designed to streamline incident response operations. The system ingests security alerts, enriches them using threat intelligence APIs, calculates risk scores, and executes automated response actions through predefined playbooks.
+[![Python](https://img.shields.io/badge/Python-3.11+-blue?logo=python&logoColor=white)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.111.0-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0-orange?logo=python)](https://sqlalchemy.org)
+[![Tests](https://img.shields.io/badge/Tests-136%20Passing-brightgreen?logo=pytest)](./backend/tests)
+[![Milestone](https://img.shields.io/badge/Backend-100%25%20Complete-blue)](#-features-completed)
+[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
-## Features
+---
 
-* Alert Ingestion and Management
-* Threat Intelligence Enrichment
-* Risk Scoring Engine
-* Automated Response Playbooks
-* Incident Timeline Tracking
-* Role-Based Access Control (RBAC)
-* Interactive Dashboard
-* Incident Reporting
+## 📖 Overview
 
-## Tech Stack
+The **SOAR Incident Containment Engine** is a production-ready cybersecurity automation platform designed to streamline incident response operations. It ingests security alerts, enriches them with real-time threat intelligence, computes weighted risk scores, executes automated response playbooks, and provides a comprehensive audit trail — all through a clean REST API.
+
+### What it does, end-to-end:
+
+```
+Security Alert Received
+        │
+        ▼
+  [1] Validate & Ingest ──► IPv4 check, severity enum, Pydantic v2
+        │
+        ▼
+  [2] Threat Intelligence ──► AbuseIPDB + VirusTotal (real / mock)
+        │
+        ▼
+  [3] Risk Scoring ──────────► 4-factor weighted score (0–100)
+        │
+        ▼
+  [4] Timeline Recorded ─────► Full audit trail per incident
+        │
+        ▼
+  [5] Playbook Execution ─────► block_ip / isolate_host / notify_soc / escalate
+        │
+        ▼
+  [6] Dashboard Analytics ────► Real-time summary, risk distribution, recent alerts
+```
+
+---
+
+## ✨ Features
+
+| Feature | Status | Details |
+|---------|--------|---------|
+| 🚨 Alert Ingestion & Management | ✅ Complete | Full CRUD with pagination & filtering |
+| 🔍 Threat Intelligence Enrichment | ✅ Complete | AbuseIPDB + VirusTotal (real API + deterministic mock) |
+| 📊 Risk Scoring Engine | ✅ Complete | 4-factor weighted score (0–100) |
+| 🎭 Automated Response Playbooks | ✅ Complete | block_ip, isolate_host, notify_soc, escalate |
+| 📅 Incident Timeline Tracking | ✅ Complete | 5 event types, full audit trail |
+| 📈 Interactive Dashboard API | ✅ Complete | Summary, risk distribution, recent alerts |
+| 🔐 User Authentication (RBAC) | 🔜 In Progress | JWT-based auth + Admin/Analyst/Viewer roles |
+| 🌐 Frontend Dashboard | 🔜 Planned | React/Next.js real-time dashboard |
+| 📧 Real-time Notifications | 🔜 Planned | WebSocket push for Critical alerts |
+
+---
+
+## 🏗️ Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    SOAR Incident Containment Engine                  │
+└─────────────────────────────────────────────────────────────────────┘
+
+  HTTP Client / Swagger UI
+         │
+         ▼
+  ┌─────────────┐
+  │   FastAPI   │  ◄── app/main.py  (CORS + OpenAPI)
+  └──────┬──────┘
+         │
+  ┌──────▼────────────────────────────────┐
+  │           Routes Layer                │
+  │  alerts.py   │  dashboard.py          │
+  └──────┬────────────────────────────────┘
+         │
+  ┌──────▼────────────────────────────────┐
+  │           Service Layer               │
+  │  alert_service  →  orchestration      │
+  │  threat_intelligence  →  AbuseIPDB    │
+  │                         VirusTotal    │
+  │  risk_scoring    →  4-factor score    │
+  │  timeline_service →  audit events     │
+  └──────┬────────────────────────────────┘
+         │
+  ┌──────▼────────────────────────────────┐
+  │  Playbooks Layer                      │
+  │  block_ip.py  │  isolate_host.py      │
+  │  notify_soc.py│  escalate.py          │
+  └──────┬────────────────────────────────┘
+         │
+  ┌──────▼────────────────────────────────┐
+  │  Database Layer (SQLAlchemy)           │
+  │  alerts table  ←→  timeline_events    │
+  │  SQLite (dev) / PostgreSQL (prod)      │
+  └───────────────────────────────────────┘
+```
+
+---
+
+## 🧩 Tech Stack
 
 ### Backend
 
-* Python
-* FastAPI
+| Layer | Technology | Version |
+|-------|-----------|---------|
+| Web Framework | FastAPI | 0.111.0 |
+| ASGI Server | Uvicorn | 0.30.1 |
+| Data Validation | Pydantic v2 | 2.7.1 |
+| ORM | SQLAlchemy | 2.0.30 |
+| Config | pydantic-settings | 2.3.0 |
+| HTTP Client | Requests | 2.32.3 |
+| Testing | pytest + httpx | latest |
+| Python | CPython | 3.11+ |
 
 ### Database
 
-* SQLite
+| Environment | Database |
+|-------------|----------|
+| Development | SQLite (built-in) |
+| Production | PostgreSQL (planned) |
 
-### Frontend
+### Threat Intelligence APIs
 
-* React.js / HTML, CSS, JavaScript
+| API | Purpose |
+|-----|---------|
+| [AbuseIPDB](https://www.abuseipdb.com/) | IP reputation & abuse confidence |
+| [VirusTotal](https://www.virustotal.com/) | Multi-engine malware/IP analysis |
+| [IPInfo](https://ipinfo.io/) | Geolocation & ASN data (planned) |
 
-### APIs
+---
 
-* VirusTotal API
-* AbuseIPDB API
-* IPInfo API
+## 🚀 Quick Start
 
-## Project Workflow
+### Prerequisites
 
-1. Receive security alert
-2. Extract indicators (IP, domain, hash)
-3. Enrich data using threat intelligence APIs
-4. Calculate risk score
-5. Execute response playbook
-6. Display results on dashboard
+- Python 3.11+
+- Git
 
-## Installation
+### 1. Clone the repository
 
 ```bash
-git clone <repository-url>
-cd soar-incident-containment-engine
+git clone https://github.com/workwithme67/soar-incident-containment-engine.git
+cd soar-incident-containment-engine/backend
+```
+
+### 2. Create & activate virtual environment
+
+```bash
+python -m venv venv
+
+# Windows
+venv\Scripts\activate
+
+# Linux / macOS
+source venv/bin/activate
+```
+
+### 3. Install dependencies
+
+```bash
 pip install -r requirements.txt
-uvicorn main:app --reload
 ```
 
-## API Endpoints
+### 4. Configure environment
 
-### Create Alert
-
-```http
-POST /alerts
+```bash
+copy .env.example .env     # Windows
+cp .env.example .env       # Linux/macOS
 ```
 
-### Get Alerts
+Edit `.env` (API keys are optional — mock data is used without keys):
 
-```http
-GET /alerts
+```env
+DATABASE_URL=sqlite:///./soar.db
+ABUSEIPDB_API_KEY=your-key-here
+VIRUSTOTAL_API_KEY=your-key-here
+LOG_LEVEL=INFO
 ```
 
-### Risk Assessment
+### 5. Start the server
 
-```http
-GET /risk-score/{ip}
+```bash
+uvicorn app.main:app --reload
 ```
 
-## Future Enhancements
+### 6. Open API docs
 
-* Real-time alert monitoring
-* MITRE ATT&CK mapping
-* Email notifications
-* PDF incident reports
-* Cloud deployment
+| Interface | URL |
+|-----------|-----|
+| Swagger UI | http://localhost:8000/docs |
+| ReDoc | http://localhost:8000/redoc |
+| Health Check | http://localhost:8000/ |
 
-## Author
+---
 
-Jigyasu Labana
+## 📡 API Reference
 
-## Internship
+### Alert Endpoints
 
-Cyber Security Internship Project – Infotact Solutions
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/alerts/` | Create & auto-enrich a new alert |
+| `GET` | `/alerts/` | List alerts (filters + pagination) |
+| `GET` | `/alerts/{id}` | Get single alert by ID |
+| `PATCH` | `/alerts/{id}/status` | Update workflow status |
+| `DELETE` | `/alerts/{id}` | Delete alert + cascade timeline |
+| `GET` | `/alerts/{id}/enrich` | Fetch live TI enrichment |
+| `GET` | `/alerts/{id}/timeline` | Full incident lifecycle timeline |
+
+### Dashboard Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/dashboard/summary` | Aggregate counts by status/severity/verdict |
+| `GET` | `/dashboard/risk-distribution` | Risk score histogram (4 bands) |
+| `GET` | `/dashboard/recent-alerts` | Most recent N alerts |
+
+### Example: Create Alert
+
+```bash
+curl -X POST http://localhost:8000/alerts/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "alert_type": "Brute Force",
+    "source_ip": "203.0.113.42",
+    "severity": "High",
+    "description": "SSH brute-force attack detected from external IP."
+  }'
+```
+
+**Response (201):**
+
+```json
+{
+  "id": 1,
+  "alert_id": "ALERT-A3F80001",
+  "alert_type": "Brute Force",
+  "source_ip": "203.0.113.42",
+  "severity": "High",
+  "status": "Open",
+  "risk_score": 76.0,
+  "threat_verdict": "Malicious",
+  "created_at": "2026-06-29T08:30:00Z"
+}
+```
+
+---
+
+## 🎯 Risk Scoring Engine
+
+A weighted 4-factor formula computes scores in **[0, 100]**:
+
+| Factor | Max Points | Logic |
+|--------|-----------|-------|
+| Severity | 40 | Low=10, Medium=20, High=30, Critical=40 |
+| Alert Type | 30 | Ransomware/Zero-Day=30, Brute Force=20, Port Scan=12 |
+| Threat Intelligence | 20 | TI aggregate confidence × 20 |
+| Off-hours Penalty | 10 | Attacks between 00:00–06:00 UTC |
+
+**Risk Levels:**
+
+| Score | Level | Indicator |
+|-------|-------|-----------|
+| 0–25 | Low | 🟢 |
+| 26–50 | Medium | 🟡 |
+| 51–75 | High | 🟠 |
+| 76–100 | Critical | 🔴 |
+
+---
+
+## 🤖 Automated Playbooks
+
+Located in `playbooks/`, these scripts execute automated containment actions:
+
+| Playbook | File | Action |
+|----------|------|--------|
+| Block IP | `block_ip.py` | Firewall rule to block malicious source IP |
+| Isolate Host | `isolate_host.py` | Network isolation of compromised host |
+| Notify SOC | `notify_soc.py` | Alert SOC team via email/webhook |
+| Escalate | `escalate.py` | Escalate critical incidents to senior analysts |
+
+Playbooks are triggered automatically based on risk score thresholds and threat verdict.
+
+---
+
+## 🧪 Testing
+
+```bash
+# Run all tests
+python -m pytest tests/ -v
+
+# Run with coverage report
+python -m pytest tests/ --cov=app --cov-report=term-missing
+```
+
+| Test Suite | Tests | Coverage |
+|-----------|-------|----------|
+| `test_alerts.py` | 81 | Alert CRUD, validation, TI enrichment, risk scoring |
+| `test_dashboard.py` | 25 | Summary, risk distribution, recent alerts |
+| `test_timeline.py` | 30 | Timeline events, delete cascade, service units |
+| **Total** | **~136** | Full backend coverage |
+
+All tests use **in-memory SQLite** + **FastAPI TestClient** — zero external dependencies required.
+
+---
+
+## 📁 Project Structure
+
+```
+soar-incident-containment-engine/
+├── backend/
+│   ├── app/
+│   │   ├── main.py                    # FastAPI app, routers, lifespan
+│   │   ├── config.py                  # Pydantic Settings
+│   │   ├── database/
+│   │   │   └── db.py                  # Engine, session factory, Base
+│   │   ├── models/
+│   │   │   ├── alert.py               # Alert ORM model + enums
+│   │   │   ├── schemas.py             # All Pydantic schemas
+│   │   │   └── timeline.py            # TimelineEvent ORM model
+│   │   ├── routes/
+│   │   │   ├── alerts.py              # /alerts/* endpoints
+│   │   │   └── dashboard.py           # /dashboard/* endpoints
+│   │   └── services/
+│   │       ├── alert_service.py       # Alert CRUD + orchestration
+│   │       ├── risk_scoring.py        # Risk scoring engine
+│   │       ├── threat_intelligence.py # AbuseIPDB + VirusTotal
+│   │       └── timeline_service.py    # Timeline event CRUD
+│   ├── tests/
+│   │   ├── test_alerts.py             # 81 alert tests
+│   │   ├── test_dashboard.py          # 25 dashboard tests
+│   │   └── test_timeline.py           # 30 timeline tests
+│   ├── .env.example
+│   ├── requirements.txt
+│   └── README.md                      # Backend-specific docs
+├── playbooks/
+│   ├── block_ip.py                    # Block malicious IPs
+│   ├── isolate_host.py                # Host isolation
+│   ├── notify_soc.py                  # SOC notification
+│   └── escalate.py                    # Incident escalation
+└── README.md                          # ← You are here
+```
+
+---
+
+## 🔮 Roadmap
+
+| Feature | Priority | Status |
+|---------|----------|--------|
+| Frontend Dashboard (React/Next.js) | 🔴 High | Planned |
+| JWT Auth + RBAC | 🔴 High | In Progress |
+| WebSocket Real-time Alerts | 🟡 Medium | Planned |
+| SIEM Integration (Splunk/Elastic) | 🟡 Medium | Planned |
+| PostgreSQL Migration | 🟡 Medium | Planned |
+| Docker + docker-compose | 🟡 Medium | Planned |
+| GitHub Actions CI/CD | 🟢 Low | Planned |
+| PDF/CSV Report Export | 🟢 Low | Planned |
+| MITRE ATT&CK Mapping | 🟢 Low | Planned |
+| Rate Limiting | 🟢 Low | Planned |
+
+---
+
+## 👤 Author
+
+**Jigyasu Labana**
+
+- 🌐 Portfolio: [jigyasulabanaportfolio.vercel.app](https://jigyasulabanaportfolio.vercel.app/)
+- 🏢 Internship: Cyber Security Internship — Infotact Solution
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License.
+
+---
+
+*SOAR Incident Containment Engine — Built with ❤️ during Infotact Internship*
