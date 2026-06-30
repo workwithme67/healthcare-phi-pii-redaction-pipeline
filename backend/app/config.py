@@ -10,6 +10,7 @@ Usage
 
   print(settings.DATABASE_URL)
   print(settings.ABUSEIPDB_API_KEY)
+  print(settings.LLM_PROVIDER)
 """
 
 from __future__ import annotations
@@ -61,6 +62,27 @@ class Settings(BaseSettings):
     # ── CORS ──────────────────────────────────────────────────────────────────
     CORS_ORIGINS: str = "*"             # comma-separated list for production
 
+    # ── Redis ─────────────────────────────────────────────────────────────────
+    REDIS_URL: str = "redis://localhost:6379/0"
+    REDIS_SESSION_TTL: int = 3600       # seconds – PHI mapping TTL
+
+    # ── LLM Provider ──────────────────────────────────────────────────────────
+    LLM_PROVIDER: Literal["openai", "ollama"] = "openai"
+    LLM_TIMEOUT: int = 30               # seconds per request
+    LLM_MAX_RETRIES: int = 3
+
+    # ── OpenAI ────────────────────────────────────────────────────────────────
+    OPENAI_API_KEY: str = ""
+    OPENAI_MODEL: str = "gpt-4.1-mini"
+    OPENAI_MAX_TOKENS: int = 1024
+    OPENAI_TEMPERATURE: float = 0.3
+
+    # ── Ollama (Local) ────────────────────────────────────────────────────────
+    OLLAMA_URL: str = "http://localhost:11434"
+    OLLAMA_MODEL: str = "llama3"
+    OLLAMA_MAX_TOKENS: int = 1024
+    OLLAMA_TEMPERATURE: float = 0.3
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -86,6 +108,11 @@ class Settings(BaseSettings):
     def ipinfo_enabled(self) -> bool:
         """True when a real IPInfo API key is configured (optional)."""
         return bool(self.IPINFO_API_KEY and self.IPINFO_API_KEY != "your-ipinfo-api-key")
+
+    @property
+    def openai_enabled(self) -> bool:
+        """True when a real OpenAI API key is configured."""
+        return bool(self.OPENAI_API_KEY and self.OPENAI_API_KEY not in ("", "your-openai-api-key"))
 
     @property
     def cors_origins_list(self) -> list[str]:
